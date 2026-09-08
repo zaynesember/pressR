@@ -53,6 +53,31 @@ archive_releases <- function(releases, dir = archive_dir(), quiet = FALSE) {
   added <- 0L
   updated <- 0L
 
+  # Cross-year guard: a source can reuse the same permalink for a genuinely
+  # different release (a member's office re-opening an annual award's
+  # nominations at the same slug a year later) or a re-scrape can simply
+  # resolve a release's date differently than before. Either way, if the url
+  # now lands in a different year than where it already lives, the per-year
+  # loop below only touches the NEW year's file and leaves a stale copy
+  # behind in the old one -- two files, one url. quanteda uses url as the
+  # docname, so tag-complete's rbind2 fails ("docnames must be unique") the
+  # next time all year files stream together, and the crash lands far from
+  # this scrape (a 2026-09-07 refresh crashed a fold-in over a url last
+  # written in 2024). Same "new wins" rule as the in-year case, just checked
+  # across every file this batch doesn't already own.
+  relocated <- character(0)  # urls found living in a year this batch isn't touching
+  for (f in archive_files(dir)) {
+    fy <- sub("^releases-([0-9]{4})\\.rds$", "\\1", basename(f))
+    if (fy %in% year) next  # the main loop below already reconciles this file
+    old <- readRDS(f)
+    stale <- old$url %in% releases$url
+    if (any(stale)) {
+      relocated <- c(relocated, old$url[stale])
+      saveRDS(old[!stale, , drop = FALSE], f, compress = "xz")
+    }
+  }
+  updated <- updated + length(relocated)
+
   for (y in unique(year)) {
     new <- releases[year == y, , drop = FALSE]
     path <- file.path(dir, sprintf("releases-%s.rds", y))
@@ -61,11 +86,14 @@ archive_releases <- function(releases, dir = archive_dir(), quiet = FALSE) {
       old <- readRDS(path)
       overlap <- sum(new$url %in% old$url)
       updated <- updated + overlap
-      added <- added + (nrow(new) - overlap)
+      # a url the cross-year guard just relocated already existed in the
+      # archive (just under a different year) -- it must not also be
+      # counted as newly added here
+      added <- added + (nrow(new) - overlap - sum(new$url %in% relocated & !(new$url %in% old$url)))
       old <- old[!(old$url %in% new$url), , drop = FALSE]  # new wins on conflict
       combined <- dplyr::bind_rows(old, new)
     } else {
-      added <- added + nrow(new)
+      added <- added + sum(!(new$url %in% relocated))
       combined <- new
     }
 

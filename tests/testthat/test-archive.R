@@ -70,6 +70,28 @@ test_that("read_archive on an empty dir returns a zero-row tibble", {
   expect_equal(nrow(out), 0L)
 })
 
+test_that("archive_releases resolves a url that moves to a different year", {
+  # A source can reuse the same permalink for a genuinely different release
+  # (an annual award's nominations re-opened at the same slug a year later),
+  # or a re-scrape can simply resolve a date differently than before. Either
+  # way the SAME url must never end up in two year files at once: quanteda
+  # uses url as the docname, so a cross-file duplicate crashes the fold-in's
+  # tag-complete step ("docnames must be unique") when the year files stream
+  # together -- far away from, and much later than, the scrape that caused it.
+  dir <- withr::local_tempdir()
+  archive_releases(make_releases("2024-11-01", "u/a", body = "2024 announcement"),
+                   dir = dir, quiet = TRUE)
+  res <- archive_releases(make_releases("2026-09-01", "u/a", body = "2026 announcement"),
+                          dir = dir, quiet = TRUE)
+  expect_equal(res$added, 0L)
+  expect_equal(res$updated, 1L)
+  back <- read_archive(dir)
+  expect_equal(nrow(back), 1L)                     # not duplicated across files
+  expect_equal(back$body, "2026 announcement")     # new wins, same as in-year conflicts
+  expect_false(file.exists(file.path(dir, "releases-2024.rds")) &&
+               "u/a" %in% readRDS(file.path(dir, "releases-2024.rds"))$url)
+})
+
 test_that("archive_releases validates input", {
   expect_error(archive_releases(list(a = 1)), "data frame")
   expect_error(archive_releases(tibble::tibble(x = 1)), "date")
