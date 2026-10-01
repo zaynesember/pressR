@@ -158,16 +158,6 @@ Issue tags and state names are recorded as each chamber/office formats them, so
 synonyms ("Health Care" vs "Healthcare") and mixed state forms (House full names,
 Senate two-letter codes) appear — normalize before aggregating if needed.
 
-## NLP layer & dashboard
-
-An exploratory analysis layer built on the archived corpus — near-duplicate
-"message family" detection, issue-tag completion, structural topic models, and
-sentiment, plus a Shiny dashboard — lives in [`nlp/`](nlp/). It also folds in two
-external congressional press-release datasets (Stout 114–117; Wang & Tucker
-109–115) for historical depth, taking the combined corpus to ~894k releases back
-to 2004. This is research code, kept separate from the installable package; see
-[`nlp/README.md`](nlp/README.md) for the pipeline and how to run it.
-
 ## Development
 
 ```r
