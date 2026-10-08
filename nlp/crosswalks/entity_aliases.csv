@@ -1,0 +1,21 @@
+entity_id,entity_type,party,aliases
+obama,president,D,obama
+trump,president,R,trump
+biden,president,D,biden
+bush,president,R,bush
+democrats,party,D,democrats;democratic party;democrat party
+republicans,party,R,republicans;republican party;the gop;gop
+pelosi,leader,D,pelosi
+schumer,leader,D,schumer
+mcconnell,leader,R,mcconnell
+mccarthy,leader,R,mccarthy
+irs,agency,,irs
+epa,agency,,epa
+ice,agency,,ice
+fbi,agency,,fbi
+cdc,agency,,cdc
+dhs,agency,,dhs;homeland security
+cfpb,agency,,cfpb
+china,foreign,,china;ccp;chinese communist party
+russia,foreign,,russia;kremlin
+iran,foreign,,iran;tehran
