@@ -1,6 +1,126 @@
 # pressR
 
-Automating the collection of U.S. Congress members' press releases.
+A dataset of U.S. congressional press releases, and the R package that builds
+it by scraping every House and Senate member's website.
+
+## The dataset
+
+**Latest snapshot: October 18, 2026.** It holds 450,453 press releases from 540
+members of Congress, January 2010 through October 18, 2026, and most include the
+full text.
+
+### Get it
+
+In R, install the package and download the snapshot:
+
+```r
+# install.packages("pak")
+pak::pak("zaynesember/pressR")
+install.packages("piggyback")   # used by download_archive()
+
+library(pressR)
+download_archive()              # ~260 MB, one file per year (2010-2026)
+
+releases <- read_archive()                          # everything (~1.5 GB in memory)
+recent   <- read_archive(from = "2025-01-01")       # or just a date range
+```
+
+You can skip installing pressR: each year is a standalone `.rds` file on the
+[`archive` release](https://github.com/zaynesember/pressR/releases/tag/archive),
+which you can read with base R:
+
+```r
+url <- "https://github.com/zaynesember/pressR/releases/download/archive/releases-2025.rds"
+download.file(url, "releases-2025.rds", mode = "wb")
+r2025 <- readRDS("releases-2025.rds")
+```
+
+### What's in it
+
+There is one row per press release:
+
+| Column | Contents |
+|--------|----------|
+| `name` | Member, as `"Last, First"` |
+| `state` | House: full state name. Senate: two-letter code |
+| `district` | House district (e.g. `"9th"`); `NA` for senators |
+| `party` | `D`, `R` or `I` |
+| `chamber` | `house` or `senate` |
+| `committee` | The member's committee assignments, separated by `;` |
+| `date` | Release date |
+| `title` | Headline |
+| `body` | Full text (94% of rows; `NA` when the page was removed or is rendered by JavaScript) |
+| `tags` | Issue tags as the office filed them, separated by `;` (41% of rows; many sites don't tag releases) |
+| `url` | Link to the original release (unique per row) |
+| `cms` | Which site type the release was scraped from |
+
+As of the latest snapshot:
+
+- **House:** 291,010 releases. **Senate:** 159,443.
+- **By party:** 270,986 D, 178,634 R, 813 I.
+- **Who's covered:** every member serving when the scrapes ran (the 119th
+  Congress), plus a few who left office after a scrape. Former members who left
+  before then aren't in it.
+- **How far back:** each member's history goes back as far as their current
+  website keeps it, so early years are thinner (see the table below).
+
+<details>
+<summary>Releases per year</summary>
+
+| Year | House | Senate | Total |
+|-----:|------:|-------:|------:|
+| 2010 | 5,777 | 2,484 | 8,261 |
+| 2011 | 7,158 | 3,407 | 10,565 |
+| 2012 | 6,232 | 3,038 | 9,270 |
+| 2013 | 9,785 | 3,498 | 13,283 |
+| 2014 | 9,040 | 3,894 | 12,934 |
+| 2015 | 12,069 | 5,820 | 17,889 |
+| 2016 | 9,891 | 5,566 | 15,457 |
+| 2017 | 16,489 | 8,426 | 24,915 |
+| 2018 | 13,464 | 7,482 | 20,946 |
+| 2019 | 19,043 | 8,935 | 27,978 |
+| 2020 | 22,001 | 13,449 | 35,450 |
+| 2021 | 26,171 | 14,399 | 40,570 |
+| 2022 | 22,449 | 13,826 | 36,275 |
+| 2023 | 26,924 | 16,118 | 43,042 |
+| 2024 | 24,635 | 15,000 | 39,635 |
+| 2025 | 35,045 | 19,571 | 54,616 |
+| 2026 (to Oct 18) | 24,837 | 14,530 | 39,367 |
+
+</details>
+
+Issue tags and state names are recorded the way each office formats them, so
+you'll see synonyms ("Health Care" vs "Healthcare") and both state forms.
+Normalize them before aggregating.
+
+## Working with the data
+
+Every release is dated, attributed (member, state, party, chamber, committee),
+and, where the office tags its releases, topic-tagged:
+
+```r
+library(dplyr); library(tidyr)
+a <- read_archive(from = "2026-01-01")
+#> # A tibble: 39,367 × 12
+#>   name             state party chamber date       title                                tags        cms
+#>   <chr>            <chr> <chr> <chr>    <date>     <chr>                                <chr>       <chr>
+#> 1 Latta, Robert    Ohio  R     house   2026-06-17 Latta Applauds FDA Approval of New … Veterans    aspx
+#> 2 Hyde-Smith, Cindy MS   R     senate  2026-04-23 Hyde-Smith Backs Bill to Reauthoriz… Health Care drupal
+#> 3 Clark, Katherine Mass… D     house   2026-06-18 Whip Clark Celebrates Reopening of … Health Care wordpress
+#> # … plus district, committee, body, url
+
+# Most-used issue tags
+a |> filter(!is.na(tags)) |> separate_rows(tags, sep = ";") |> count(tags, sort = TRUE)
+#>   tags            n
+#>   Education    2281
+#>   Veterans     1960
+#>   Immigration  1700
+#>   Health Care  1639
+#>   Congress     1491
+#>   # …
+```
+
+## The scraper
 
 `pressR` scrapes press releases from U.S. House (`*.house.gov`) and Senate
 (`*.senate.gov`) members' websites over a date range and returns a tidy data
@@ -8,7 +128,7 @@ frame. Instead of guessing among dozens of CSS/XPath selectors per site, it
 **detects the content-management system** behind each site and routes to a
 dedicated extractor. Coverage is ~99% of the House and ~99% of the Senate.
 
-## Why CMS detection
+### Why CMS detection
 
 Member sites cluster into a few vendor families. The House skews to the
 official Drupal template; the Senate skews to WordPress (often with a custom
@@ -28,14 +148,14 @@ Pages are fetched statically by default; a headless-browser fallback
 ([`render_html()`], via the suggested **chromote** package) is available for the
 rare JS-rendered site.
 
-## Installation
+### Installation
 
 ```r
 # install.packages("pak")
 pak::pak("zaynesember/pressR")
 ```
 
-## Usage
+### Usage
 
 ```r
 library(pressR)
@@ -75,7 +195,7 @@ Every release-returning function yields columns `date`, `title`, `body`,
 attr(res, "failures")   # tibble(url, stage, message)
 ```
 
-## How it works
+### How it works
 
 1. **`list_members()`** parses <https://www.house.gov/representatives>.
 2. **`detect_cms()`** classifies a homepage via its `<meta generator>` tag and
@@ -85,7 +205,7 @@ attr(res, "failures")   # tibble(url, stage, message)
 4. **`scrape_member()`** ties these together for one site; **`scrape_pressers()`**
    runs many, isolating per-site failures.
 
-## Politeness & configuration
+### Politeness & configuration
 
 Requests carry an identifying user agent and are throttled and retried via
 [httr2](https://httr2.r-lib.org/). Tunable via options:
@@ -95,7 +215,7 @@ options(pressR.throttle = 20)            # requests/minute (default 20)
 options(pressR.cache_dir = "~/.cache/pressR")  # enable on-disk HTTP cache
 ```
 
-## Archiving
+### Archiving
 
 Scrapes return in-memory tibbles; to build historical coverage, append runs to
 a local, year-partitioned, de-duplicated store (xz-compressed RDS, keyed on
@@ -113,60 +233,6 @@ on disk, not in the package. Prebuilt snapshots are published as GitHub release
 assets; fetch them without scraping via `download_archive()` (and, for
 maintainers with write access, `publish_archive()`). Both need the suggested
 **piggyback** package.
-
-## A look at the data
-
-Archiving accumulates a tidy, one-row-per-release corpus across both chambers.
-The published snapshot — fetch it with `download_archive()` — currently holds:
-
-- **450,453 releases** from ~540 member offices, **2010 through mid-October 2026**
-- **~94%** carry full body text; issue tags wherever the CMS exposes them (~41% overall)
-- **House** — 291,010 · **Senate** — 159,443 · by party ≈ 271k D · 179k R · 0.8k I
-
-A reproducible recent slice (what `scrape_house(from = "2026-01-01")` yields):
-
-```r
-read_archive(from = "2026-01-01")
-#> # A tibble: 39,367 × 12
-#>   name             state party chamber date       title                                tags        cms
-#>   <chr>            <chr> <chr> <chr>    <date>     <chr>                                <chr>       <chr>
-#> 1 Latta, Robert    Ohio  R     house   2026-06-17 Latta Applauds FDA Approval of New … Veterans    aspx
-#> 2 Hyde-Smith, Cindy MS   R     senate  2026-04-23 Hyde-Smith Backs Bill to Reauthoriz… Health Care drupal
-#> 3 Clark, Katherine Mass… D     house   2026-06-18 Whip Clark Celebrates Reopening of … Health Care wordpress
-#> # … plus district, committee, body, url
-```
-
-Every release is dated, attributed (member, state, party, chamber, committee),
-and topic-tagged, so the corpus is ready for quick analysis:
-
-```r
-library(dplyr); library(tidyr)
-a <- read_archive(from = "2026-01-01")
-
-# Most-used issue tags
-a |> filter(!is.na(tags)) |> separate_rows(tags, sep = ";") |> count(tags, sort = TRUE)
-#>   tags            n
-#>   Education    1198
-#>   Veterans     1088
-#>   Immigration   811
-#>   Health Care   775
-#>   Agriculture   584
-#>   # …
-```
-
-Issue tags and state names are recorded as each chamber/office formats them, so
-synonyms ("Health Care" vs "Healthcare") and mixed state forms (House full names,
-Senate two-letter codes) appear — normalize before aggregating if needed.
-
-## NLP layer & dashboard
-
-An exploratory analysis layer built on the archived corpus — near-duplicate
-"message family" detection, issue-tag completion, structural topic models, and
-sentiment, plus a Shiny dashboard — lives in [`nlp/`](nlp/). It also folds in two
-external congressional press-release datasets (Stout 114–117; Wang & Tucker
-109–115) for historical depth, taking the combined corpus to ~894k releases back
-to 2004. This is research code, kept separate from the installable package; see
-[`nlp/README.md`](nlp/README.md) for the pipeline and how to run it.
 
 ## Development
 
