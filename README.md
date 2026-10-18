@@ -119,15 +119,15 @@ maintainers with write access, `publish_archive()`). Both need the suggested
 Archiving accumulates a tidy, one-row-per-release corpus across both chambers.
 The published snapshot — fetch it with `download_archive()` — currently holds:
 
-- **436,201 releases** from 537 member offices, **2010 through mid-2026**
+- **450,453 releases** from ~540 member offices, **2010 through mid-October 2026**
 - **~94%** carry full body text; issue tags wherever the CMS exposes them (~41% overall)
-- **House** — 282,687 · **Senate** — 153,514 · by party ≈ 262k D · 173k R · 0.7k I
+- **House** — 291,010 · **Senate** — 159,443 · by party ≈ 271k D · 179k R · 0.8k I
 
 A reproducible recent slice (what `scrape_house(from = "2026-01-01")` yields):
 
 ```r
 read_archive(from = "2026-01-01")
-#> # A tibble: 24,122 × 12
+#> # A tibble: 39,367 × 12
 #>   name             state party chamber date       title                                tags        cms
 #>   <chr>            <chr> <chr> <chr>    <date>     <chr>                                <chr>       <chr>
 #> 1 Latta, Robert    Ohio  R     house   2026-06-17 Latta Applauds FDA Approval of New … Veterans    aspx
