@@ -64,11 +64,25 @@ scrape_pressers <- function(members, from, to = Sys.Date(),
   stage <- rep(NA_character_, n)
   msg <- rep(NA_character_, n)
 
-  for (i in seq_len(n)) {
-    if (!quiet) cli::cli_alert_info("[{i}/{n}] {meta$url[i]}")
-    r <- scrape_one(i)
-    if (is.data.frame(r)) results[[i]] <- r else { stage[i] <- r$stage; msg[i] <- r$message }
+  # Interactive sessions get a progress bar with ETA; batch/log output keeps
+  # one line per member so a detached run stays greppable.
+  bar <- !quiet && interactive()
+  n_rel <- 0L
+  if (bar) {
+    cli::cli_progress_bar(
+      format = paste0("{cli::pb_bar} {cli::pb_current}/{cli::pb_total} members ",
+                      "| {n_rel} releases | ETA {cli::pb_eta_str} | {cli::pb_status}"),
+      total = n, clear = FALSE
+    )
   }
+  for (i in seq_len(n)) {
+    if (bar) cli::cli_progress_update(set = i - 1L, status = sub("^https?://(www\\.)?", "", meta$url[i]))
+    else if (!quiet) cli::cli_alert_info("[{i}/{n}] {meta$url[i]}")
+    r <- scrape_one(i)
+    if (is.data.frame(r)) { results[[i]] <- r; n_rel <- n_rel + nrow(r) } else { stage[i] <- r$stage; msg[i] <- r$message }
+    if (bar) cli::cli_progress_update(set = i)
+  }
+  if (bar) cli::cli_progress_done()
 
   # Retry "error" failures once: these are often transient (a timeout during
   # listing discovery under load), not genuine. "empty" results are not retried
